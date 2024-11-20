@@ -1,0 +1,4 @@
+.pio/
+.vscode/
+dependencies.lock
+sdkconfig.lilygo-t-display
