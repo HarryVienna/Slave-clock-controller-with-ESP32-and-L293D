@@ -23,13 +23,13 @@
 
 
 
-const char* ssid       = "SSID";     // Change to your SSID
-const char* password   = "PASSWORD"; // Change to your WIFI password
+const char* ssid       = "xxx";     // Change to your SSID
+const char* password   = "xxx";     // Change to your WIFI password
 const char* timezone   = "CET-1CEST,M3.5.0,M10.5.0/3";
 const char* ntpserver  = "pool.ntp.org";
 const char* hostname   = "ESP32-Nebenuhr";
 
-bool timeSynced = false;    // Status of time-synchronisation
+bool timeSynced    = false; // Status of time-synchronisation
 bool wifiConnected = false; // Status of WiFi connection
 
 
@@ -41,7 +41,7 @@ ButtonHandler buttons(BUTTON_MOVE_PIN, BUTTON_START_PIN);
 
 // Prototype for tasks
 void displayTimeTask(void *param);
-
+void moveHandsTask(void *param);
 
 void printInfo() {
   
@@ -97,7 +97,6 @@ void updateDisplayStatus() {
 
 // Callback for SNTP sync
 void timeSyncCallback() {
-
   Serial.println(" sync_callback");
 
   timeSynced = true;
@@ -107,6 +106,7 @@ void timeSyncCallback() {
 // Callback for connected event
 void wiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("Connected to AP successfully!");
+
   wifiConnected = true;
   
   updateDisplayStatus();
@@ -119,16 +119,12 @@ void wiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println(info.wifi_sta_disconnected.reason);
 
   wifiConnected = false;
-  timeSynced = false;
   
   updateDisplayStatus();
 
   Serial.println("Trying to Reconnect");
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-      vTaskDelay(pdMS_TO_TICKS(500));
-      Serial.print(".");
-  }
+  //vTaskDelay(pdMS_TO_TICKS(1000 * 1));
+  WiFi.reconnect();
 }
 
 // Function to send multiple pulses with delays to LM293D
@@ -203,7 +199,9 @@ void setup(void) {
   Serial.printf("Connecting to %s ", ssid);
 
   WiFi.setHostname(hostname);
-  WiFi.disconnect();
+  // Total disconnect
+  WiFi.disconnect(true, true);
+  // Start WiFi
   WiFi.begin(ssid, password);
 
 
@@ -211,14 +209,23 @@ void setup(void) {
   networkTime.init(timeSyncCallback);
 
   // Create task
+  xTaskCreatePinnedToCore(moveHandsTask, "MoveHands", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(displayTimeTask, "DisplayTime", 4096, NULL, 1, NULL, 1);
 
 }
 
-void loop() {
-  if (timeSynced) {
+// Task to move the hands
+void moveHandsTask(void *param) {
+  struct tm timeinfo;
 
-    struct tm timeinfo;
+  // Wait until we get the correct time
+  do {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  } while (!timeSynced);
+
+  // Now start movement of the hands
+  while (true) {
+    
     networkTime.getTime(timeinfo); // Get the current time
 
     static int16_t clock_minutes = 0; // Variable to track the clock's current minute position
@@ -239,9 +246,7 @@ void loop() {
     }
   }
 
-  vTaskDelay(pdMS_TO_TICKS(1000));
 }
-
 
 // Task: Show time on the display
 void displayTimeTask(void *param) {
@@ -261,5 +266,9 @@ void displayTimeTask(void *param) {
 
     vTaskDelay(pdMS_TO_TICKS(1000)); // Wait a second
   }
+}
+
+// Not needed
+void loop() {
 }
 
