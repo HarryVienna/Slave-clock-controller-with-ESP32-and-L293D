@@ -226,24 +226,27 @@ void moveHandsTask(void *param) {
   // Now start movement of the hands
   while (true) {
     
-    networkTime.getTime(timeinfo); // Get the current time
+    if (networkTime.getTime(timeinfo)) { // Get the current time
 
-    static int16_t clock_minutes = 0; // Variable to track the clock's current minute position
-    uint16_t current_minutes = (timeinfo.tm_hour % 12) * 60 + timeinfo.tm_min;  // Calculate current minutes on the 12-hour clock
-    int16_t difference = current_minutes - clock_minutes; // Calculate the difference in minutes
+      static int16_t clock_minutes = 0; // Variable to track the clock's current minute position
+      uint16_t current_minutes = (timeinfo.tm_hour % 12) * 60 + timeinfo.tm_min;  // Calculate current minutes on the 12-hour clock
+      int16_t difference = current_minutes - clock_minutes; // Calculate the difference in minutes
 
-    // Handle negative differences (e.g., crossing midnight or wrapping around the 12-hour format)
-    if (difference < 0) {
-        difference += 12 * 60; // Add 12 hours in minutes. Time always goes forward :-)
+      // Handle negative differences (e.g., crossing midnight or wrapping around the 12-hour format)
+      if (difference < 0) {
+          difference += 12 * 60; // Add 12 hours in minutes. Time always goes forward :-)
+      }
+
+      // Update clock_minutes to the current position after calculation
+      if (difference != 0) {
+        clock_minutes = current_minutes;
+        
+        // Move hands
+        sendPulses(difference);
+      }
     }
 
-    // Update clock_minutes to the current position after calculation
-    if (difference != 0) {
-      clock_minutes = current_minutes;
-      
-      // Move hands
-      sendPulses(difference);
-    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 
 }
@@ -254,15 +257,16 @@ void displayTimeTask(void *param) {
 
   while (true) {
     // Get the current time
-    networkTime.getTime(timeinfo);
+    if (networkTime.getTime(timeinfo)) {
 
-    // Time in format HH:MM:SS 
-    char timeStr[9]; // Space for "HH:MM:SS"
-    strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
+      // Time in format HH:MM:SS 
+      char timeStr[9]; // Space for "HH:MM:SS"
+      strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
 
-    // Show the time on the display
-    tft.setTextDatum(MC_DATUM);
-    tft.drawString(timeStr, tft.width() / 2, tft.height() / 2, 4);
+      // Show the time on the display
+      tft.setTextDatum(MC_DATUM);
+      tft.drawString(timeStr, tft.width() / 2, tft.height() / 2, 4);
+    }
 
     vTaskDelay(pdMS_TO_TICKS(1000)); // Wait a second
   }
