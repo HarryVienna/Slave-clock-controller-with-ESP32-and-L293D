@@ -6,8 +6,13 @@
 #include "sntp/NetworkTime.h"
 #include "buttons/ButtonHandler.h"
 
+// Define the hour value for the clock. Either 12 or 24.
+// If it is a 24-hour clock, the hour value is calculated modulo 24, 
+// which in fact does not change anything. 
+// For a 12-hour clock, the hours 12-23 are used to calculate the value 0-11
+#define CLOCK_HOURS 24
 
-// Farben definieren
+// Define colors
 #define RED TFT_RED
 #define ORANGE TFT_ORANGE
 #define GREEN TFT_GREEN
@@ -21,6 +26,9 @@
 #define PULSE_GPIO_INPUT1 GPIO_NUM_26 // Pin for Input1 of LM293D
 #define PULSE_GPIO_INPUT2 GPIO_NUM_27 // Pin for Input2 of LM293D
 
+#define PWM_CHANNEL 0    // PWM channel
+#define PWM_FREQ 100     // 100 Hz
+#define PWM_RESOLUTION 8 // 8 bits, 0-255 
 
 
 const char* ssid       = "xxx";     // Change to your SSID
@@ -159,8 +167,13 @@ void sendPulse() {
 }
 
 void setup(void) {
+
+  setCpuFrequencyMhz(80);
+
   Serial.begin(115200);
-  while (!Serial); 
+  while (!Serial){
+    delay(500);
+  } 
 
   printInfo();
 
@@ -169,8 +182,15 @@ void setup(void) {
   pinMode(PULSE_GPIO_INPUT1, OUTPUT);
   pinMode(PULSE_GPIO_INPUT2, OUTPUT);
 
+
   // Init display
   tft.init();
+
+  // Set display brightness very low to save energy
+  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(TFT_BL, PWM_CHANNEL);
+  ledcWrite(PWM_CHANNEL, 10);
+
   tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
 
@@ -199,11 +219,12 @@ void setup(void) {
   Serial.printf("Connecting to %s ", ssid);
 
   WiFi.setHostname(hostname);
+
   // Total disconnect
   WiFi.disconnect(true, true);
   // Start WiFi
   WiFi.begin(ssid, password);
-
+  WiFi.setSleep(WIFI_PS_MAX_MODEM);
 
   // SNTP init with Callback
   networkTime.init(timeSyncCallback);
@@ -229,12 +250,12 @@ void moveHandsTask(void *param) {
     if (networkTime.getTime(timeinfo)) { // Get the current time
 
       static int16_t clock_minutes = 0; // Variable to track the clock's current minute position
-      uint16_t current_minutes = (timeinfo.tm_hour % 12) * 60 + timeinfo.tm_min;  // Calculate current minutes on the 12-hour clock
+      uint16_t current_minutes = (timeinfo.tm_hour % CLOCK_HOURS) * 60 + timeinfo.tm_min;  // Calculate current minutes on the 12-hour clock
       int16_t difference = current_minutes - clock_minutes; // Calculate the difference in minutes
 
       // Handle negative differences (e.g., crossing midnight or wrapping around the 12-hour format)
       if (difference < 0) {
-          difference += 12 * 60; // Add 12 hours in minutes. Time always goes forward :-)
+          difference += CLOCK_HOURS * 60; // Add 12 hours in minutes. Time always goes forward :-)
       }
 
       // Update clock_minutes to the current position after calculation
