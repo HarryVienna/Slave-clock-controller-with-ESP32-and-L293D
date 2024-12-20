@@ -31,8 +31,8 @@
 #define PWM_RESOLUTION 8 // 8 bits, 0-255 
 
 
-const char* ssid       = "xxx";     // Change to your SSID
-const char* password   = "xxx";     // Change to your WIFI password
+const char* ssid       = "xxx";  // Change to your SSID
+const char* password   = "xxx";  // Change to your WIFI password
 const char* timezone   = "CET-1CEST,M3.5.0,M10.5.0/3";
 const char* ntpserver  = "pool.ntp.org";
 const char* hostname   = "ESP32-Nebenuhr";
@@ -250,12 +250,12 @@ void moveHandsTask(void *param) {
     if (networkTime.getTime(timeinfo)) { // Get the current time
 
       static int16_t clock_minutes = 0; // Variable to track the clock's current minute position
-      uint16_t current_minutes = (timeinfo.tm_hour % CLOCK_HOURS) * 60 + timeinfo.tm_min;  // Calculate current minutes on the 12-hour clock
+      uint16_t current_minutes = (timeinfo.tm_hour % CLOCK_HOURS) * 60 + timeinfo.tm_min;  // Calculate current minutes on the clock
       int16_t difference = current_minutes - clock_minutes; // Calculate the difference in minutes
 
       // Handle negative differences (e.g., crossing midnight or wrapping around the 12-hour format)
       if (difference < 0) {
-          difference += CLOCK_HOURS * 60; // Add 12 hours in minutes. Time always goes forward :-)
+          difference += CLOCK_HOURS * 60; // Add hours in minutes. Time always goes forward :-)
       }
 
       // Update clock_minutes to the current position after calculation
