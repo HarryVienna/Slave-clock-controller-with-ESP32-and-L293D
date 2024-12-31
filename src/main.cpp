@@ -1,16 +1,17 @@
 #include <TFT_eSPI.h>
 #include <SPI.h>
-#include <WiFi.h>
 #include <time.h>
 
-#include "sntp/NetworkTime.h"
+#include "wifi/WifiSmartConfig.h"
 #include "buttons/ButtonHandler.h"
+
+#define TAG "SLAVECLOCK"
 
 // Define the hour value for the clock. Either 12 or 24.
 // If it is a 24-hour clock, the hour value is calculated modulo 24, 
 // which in fact does not change anything. 
 // For a 12-hour clock, the hours 12-23 are used to calculate the value 0-11
-#define CLOCK_HOURS 24
+#define CLOCK_HOURS 12
 
 // Define colors
 #define RED TFT_RED
@@ -29,27 +30,32 @@
 #define PWM_CHANNEL 0    // PWM channel
 #define PWM_FREQ 100     // 100 Hz
 #define PWM_RESOLUTION 8 // 8 bits, 0-255 
+#define PWM_DUTY 20      // Brightness
 
 
-const char* ssid       = "xxx";  // Change to your SSID
-const char* password   = "xxx";  // Change to your WIFI password
-const char* timezone   = "CET-1CEST,M3.5.0,M10.5.0/3";
 const char* ntpserver  = "pool.ntp.org";
 const char* hostname   = "ESP32-Nebenuhr";
+const char* aes_key    = "ESP32-AES-PHRASE"; 
 
 bool timeSynced    = false; // Status of time-synchronisation
-bool wifiConnected = false; // Status of WiFi connection
-
-
-// Inits objects
-TFT_eSPI tft = TFT_eSPI();
-NetworkTime networkTime(ntpserver, timezone);
-ButtonHandler buttons(BUTTON_MOVE_PIN, BUTTON_START_PIN);
-
+WifiSmartConfig::WifiConnectStatus wifiConnected = WifiSmartConfig::WifiConnectStatus::Disconnected; // Status of WiFi connection
 
 // Prototype for tasks
 void displayTimeTask(void *param);
 void moveHandsTask(void *param);
+
+// Prototype for callbacks
+void connectionCallback(WifiSmartConfig::WifiConnectStatus status);
+void timeSyncCallback(struct timeval *tv);
+
+
+// Init objects
+TFT_eSPI tft = TFT_eSPI();
+ButtonHandler buttons(BUTTON_MOVE_PIN, BUTTON_START_PIN);
+WifiSmartConfig wifi(aes_key, hostname, ntpserver, connectionCallback, timeSyncCallback);
+
+
+
 
 void printInfo() {
   
@@ -67,10 +73,6 @@ void printInfo() {
   Serial.print("Free heap memory: ");
   Serial.print(ESP.getFreeHeap());
   Serial.println(" bytes");
-
-  // MAC-Adresse des ESP32
-  Serial.print("MAC Address: ");
-  Serial.println(WiFi.macAddress());
 
   // SDK-Version
   Serial.print("ESP32 SDK Version: ");
@@ -93,51 +95,52 @@ void printInfo() {
 }
 
 void updateDisplayStatus() {
-  if (!wifiConnected) {
-    tft.fillRect(0, 0, tft.width(), 20, RED);    // Red for no WiFi
-  } else if (wifiConnected && !timeSynced) {
-    tft.fillRect(0, 0, tft.width(), 20, ORANGE); // Orange for no SNTP-Sync
-  } else if (wifiConnected && timeSynced) {
-    tft.fillRect(0, 0, tft.width(), 20, GREEN);  // Green for connected
+
+  if (wifiConnected == WifiSmartConfig::WifiConnectStatus::Disconnected) {
+    tft.fillRect(0, 0, tft.width() / 2 - 1, 20, RED);    // Red for no WiFi
+  } else if (wifiConnected == WifiSmartConfig::WifiConnectStatus::Smartconfig) {
+    tft.fillRect(0, 0, tft.width() / 2 - 1, 20, ORANGE); // Orange for Smartconfig
+  } else if (wifiConnected == WifiSmartConfig::WifiConnectStatus::Connected) {
+    tft.fillRect(0, 0, tft.width() / 2 - 1, 20, GREEN);  // Green for connected
+  }
+
+  if (timeSynced) {
+    tft.fillRect(tft.width() / 2 + 1, 0, tft.width(), 20, GREEN);
+  } else {
+    tft.fillRect(tft.width() / 2 + 1, 0, tft.width(), 20, RED);
   }
 }
 
 
-// Callback for SNTP sync
-void timeSyncCallback() {
-  Serial.println(" sync_callback");
+/// Get the current time
+bool getTime(struct tm& timeInfo) {
+  time_t now;
+  time(&now);
+  if (localtime_r(&now, &timeInfo) == nullptr) {
+      ESP_LOGW(TAG, "Zeit konnte nicht abgerufen werden");
+      return false;
+  }
+  ESP_LOGI(TAG, "Zeit ok");
+  return true;
+}
+
+void connectionCallback(WifiSmartConfig::WifiConnectStatus status) {
+  ESP_LOGI(TAG, "Connection status: %d", status);
+
+  wifiConnected = status;
+  updateDisplayStatus();
+}
+
+void timeSyncCallback(struct timeval *tv) {
+   ESP_LOGI(TAG, "Zeit synchronisiert: %s", ctime(&tv->tv_sec));
 
   timeSynced = true;
   updateDisplayStatus();
 }
 
-// Callback for connected event
-void wiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("Connected to AP successfully!");
-
-  wifiConnected = true;
-  
-  updateDisplayStatus();
-}
-
-// Callback for disconnected event
-void wiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("Disconnected from WiFi access point");
-  Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(info.wifi_sta_disconnected.reason);
-
-  wifiConnected = false;
-  
-  updateDisplayStatus();
-
-  Serial.println("Trying to Reconnect");
-  //vTaskDelay(pdMS_TO_TICKS(1000 * 1));
-  WiFi.reconnect();
-}
-
 // Function to send multiple pulses with delays to LM293D
 void sendPulses(uint16_t count) {
-  Serial.printf("Pulses %d \n", count);
+  ESP_LOGI(TAG, "Pulses %d ", count);
 
   static int level = 0;
 
@@ -161,7 +164,7 @@ void sendPulses(uint16_t count) {
 // Function to send one pulse
 void sendPulse() {
 
-  Serial.println("Move hand");
+  ESP_LOGI(TAG, "Move hand");
 
   sendPulses(1);
 }
@@ -181,55 +184,67 @@ void setup(void) {
   pinMode(PULSE_GPIO_ENABLE, OUTPUT);
   pinMode(PULSE_GPIO_INPUT1, OUTPUT);
   pinMode(PULSE_GPIO_INPUT2, OUTPUT);
+  digitalWrite(PULSE_GPIO_ENABLE, LOW);
 
 
   // Init display
   tft.init();
-
-  // Set display brightness very low to save energy
-  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(TFT_BL, PWM_CHANNEL);
-  ledcWrite(PWM_CHANNEL, 10);
-
   tft.setRotation(1);
+  tft.setTextWrap(true, false);
   tft.fillScreen(TFT_BLACK);
-
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextSize(2);
 
 
-  // Info text
-  tft.drawString("Move the hands to", 0, 30);
-  tft.drawString("12 o'clock position.", 0, 60);
-  tft.drawString("Then press Start", 0, 90);
+  // Set display brightness very low to save energy
+  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(TFT_BL, PWM_CHANNEL);
+  ledcWrite(PWM_CHANNEL, PWM_DUTY);
 
+  // Init status display
+  updateDisplayStatus();
+
+  // Start Wifi 
+  tft.setCursor(0, 30);
+  tft.print("Waiting for WiFi");
+
+  if (wifi.init() == ESP_OK) {
+     ESP_LOGI(TAG, "WiFi initialisiert");
+  } else {
+     ESP_LOGE(TAG, "WiFi Initialisierung fehlgeschlagen");
+    return;
+  }
+
+  while (wifi.connect() != ESP_OK) {
+     ESP_LOGE(TAG, "WiFi Verbindung fehlgeschlagen. Erneuter Versuch...");
+  }
+
+  // SNTP und Zeitzone initialisieren
+  if (wifi.initSNTP() == ESP_OK) {
+     ESP_LOGI(TAG, "SNTP initialisiert");
+  } else {
+     ESP_LOGE(TAG, "SNTP Initialisierung fehlgeschlagen");
+  }
+
+  if (wifi.initTimezone() == ESP_OK) {
+     ESP_LOGI(TAG, "Zeitzone initialisiert");
+  } else {
+     ESP_LOGE(TAG, "Zeitzonen Initialisierung fehlgeschlagen");
+  }
+
+
+ 
+
+  // Info text
+  tft.setCursor(0, 30);
+  tft.print("Move the hands to 12 o'clock position. Then press Start");
   
-  Serial.println("Start Setup");
+   ESP_LOGI(TAG, "Start Setup");
   buttons.setMoveCallback(sendPulse); // Callback for moving the handles
   buttons.start(); // Blocking loop to set the hands
   
-  // Setting of hands is done. Clear screen and proceed
-  tft.fillScreen(TFT_BLACK);
-
-
-  // Init WIFI
-  WiFi.onEvent(wiFiStationConnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
-  WiFi.onEvent(wiFiStationDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
-
-  Serial.printf("Connecting to %s ", ssid);
-
-  WiFi.setHostname(hostname);
-
-  // Total disconnect
-  WiFi.disconnect(true, true);
-  // Start WiFi
-  WiFi.begin(ssid, password);
-  WiFi.setSleep(WIFI_PS_MAX_MODEM);
-
-  // SNTP init with Callback
-  networkTime.init(timeSyncCallback);
-
   // Create task
+  tft.fillRect(0, 30, tft.width(), tft.height(), TFT_BLACK);    
   xTaskCreatePinnedToCore(moveHandsTask, "MoveHands", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(displayTimeTask, "DisplayTime", 4096, NULL, 1, NULL, 1);
 
@@ -247,11 +262,13 @@ void moveHandsTask(void *param) {
   // Now start movement of the hands
   while (true) {
     
-    if (networkTime.getTime(timeinfo)) { // Get the current time
+    if (getTime(timeinfo)) { // Get the current time
 
       static int16_t clock_minutes = 0; // Variable to track the clock's current minute position
       uint16_t current_minutes = (timeinfo.tm_hour % CLOCK_HOURS) * 60 + timeinfo.tm_min;  // Calculate current minutes on the clock
       int16_t difference = current_minutes - clock_minutes; // Calculate the difference in minutes
+
+      ESP_LOGI(TAG, "Difference: %d", difference);
 
       // Handle negative differences (e.g., crossing midnight or wrapping around the 12-hour format)
       if (difference < 0) {
@@ -278,7 +295,7 @@ void displayTimeTask(void *param) {
 
   while (true) {
     // Get the current time
-    if (networkTime.getTime(timeinfo)) {
+    if (getTime(timeinfo)) {
 
       // Time in format HH:MM:SS 
       char timeStr[9]; // Space for "HH:MM:SS"
