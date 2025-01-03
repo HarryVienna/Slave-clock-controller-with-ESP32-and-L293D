@@ -1,6 +1,7 @@
 #include <TFT_eSPI.h>
 #include <SPI.h>
 #include <time.h>
+#include <mutex>
 
 #include "wifi/WifiSmartConfig.h"
 #include "buttons/ButtonHandler.h"
@@ -11,7 +12,7 @@
 // If it is a 24-hour clock, the hour value is calculated modulo 24, 
 // which in fact does not change anything. 
 // For a 12-hour clock, the hours 12-23 are used to calculate the value 0-11
-#define CLOCK_HOURS 12
+#define CLOCK_HOURS 24
 
 // Define colors
 #define RED TFT_RED
@@ -36,6 +37,8 @@
 const char* ntpserver  = "pool.ntp.org";
 const char* hostname   = "ESP32-Nebenuhr";
 const char* aes_key    = "ESP32-AES-PHRASE"; 
+
+std::mutex tftMutex;
 
 bool timeSynced    = false; // Status of time-synchronisation
 WifiSmartConfig::WifiConnectStatus wifiConnected = WifiSmartConfig::WifiConnectStatus::Disconnected; // Status of WiFi connection
@@ -96,6 +99,8 @@ void printInfo() {
 
 void updateDisplayStatus() {
 
+  tftMutex.lock();
+
   if (wifiConnected == WifiSmartConfig::WifiConnectStatus::Disconnected) {
     tft.fillRect(0, 0, tft.width() / 2 - 1, 20, RED);    // Red for no WiFi
   } else if (wifiConnected == WifiSmartConfig::WifiConnectStatus::Smartconfig) {
@@ -109,6 +114,8 @@ void updateDisplayStatus() {
   } else {
     tft.fillRect(tft.width() / 2 + 1, 0, tft.width(), 20, RED);
   }
+
+  tftMutex.unlock(); 
 }
 
 
