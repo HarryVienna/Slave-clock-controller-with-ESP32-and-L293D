@@ -39,9 +39,9 @@ private:
   static const char* NVS_NAMESPACE;
   static const char* TIMEZONE_VALUE;
 
-  char* _aes_key;
-  char* _hostname;
-  char* _ntp_server;
+  const char* _aes_key;
+  const char* _hostname;
+  const char* _ntp_server;
 
   EventGroupHandle_t _wifi_event_group;
   int _retry_num;

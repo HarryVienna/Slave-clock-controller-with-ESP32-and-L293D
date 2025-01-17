@@ -31,13 +31,15 @@
 #define PWM_CHANNEL 0    // PWM channel
 #define PWM_FREQ 100     // 100 Hz
 #define PWM_RESOLUTION 8 // 8 bits, 0-255 
-#define PWM_DUTY 20      // Brightness
+#define PWM_DUTY 5      // Brightness
 
 
 const char* ntpserver  = "pool.ntp.org";
 const char* hostname   = "ESP32-Nebenuhr";
 const char* aes_key    = "ESP32-AES-PHRASE"; 
 
+TaskHandle_t moveHandsTaskHandle;
+TaskHandle_t displayTimeTaskHandle;
 std::mutex tftMutex;
 
 bool timeSynced    = false; // Status of time-synchronisation
@@ -127,7 +129,6 @@ bool getTime(struct tm& timeInfo) {
       ESP_LOGW(TAG, "Zeit konnte nicht abgerufen werden");
       return false;
   }
-  ESP_LOGI(TAG, "Zeit ok");
   return true;
 }
 
@@ -147,7 +148,7 @@ void timeSyncCallback(struct timeval *tv) {
 
 // Function to send multiple pulses with delays to LM293D
 void sendPulses(uint16_t count) {
-  ESP_LOGI(TAG, "Pulses %d ", count);
+  ESP_LOGI(TAG, "Send pulses %d ", count);
 
   static int level = 0;
 
@@ -184,6 +185,9 @@ void setup(void) {
   while (!Serial){
     delay(500);
   } 
+
+  esp_reset_reason_t reason = esp_reset_reason();
+  Serial.printf("Reset Reason: %d\n", reason);
 
   printInfo();
 
@@ -240,20 +244,39 @@ void setup(void) {
   }
 
 
- 
+  const char* reset_reason_str;
+  switch (reason) {
+      case ESP_RST_POWERON: reset_reason_str = "Power-on Reset"; break;
+      case ESP_RST_EXT: reset_reason_str = "External Reset"; break;
+      case ESP_RST_SW: reset_reason_str = "Software Reset"; break;
+      case ESP_RST_PANIC: reset_reason_str = "Panic Reset (Exception)"; break;
+      case ESP_RST_INT_WDT: reset_reason_str = "Interrupt WDT Reset"; break;
+      case ESP_RST_TASK_WDT: reset_reason_str = "Task WDT Reset"; break;
+      case ESP_RST_WDT: reset_reason_str = "Other WDT Reset"; break;
+      case ESP_RST_DEEPSLEEP: reset_reason_str = "Deep Sleep Reset"; break;
+      case ESP_RST_BROWNOUT: reset_reason_str = "Brownout Reset"; break;
+      case ESP_RST_SDIO: reset_reason_str = "SDIO Reset"; break;
+      default: reset_reason_str = "Unknown Reset"; break;
+  }
+
+  tft.fillRect(0, 30, tft.width(), tft.height(), TFT_BLACK); 
+  tft.setCursor(0, 30);
+  tft.print(reset_reason_str);
 
   // Info text
-  tft.setCursor(0, 30);
+  tft.setCursor(0, 50);
   tft.print("Move the hands to 12 o'clock position. Then press Start");
   
    ESP_LOGI(TAG, "Start Setup");
   buttons.setMoveCallback(sendPulse); // Callback for moving the handles
   buttons.start(); // Blocking loop to set the hands
   
-  // Create task
+
   tft.fillRect(0, 30, tft.width(), tft.height(), TFT_BLACK);    
-  xTaskCreatePinnedToCore(moveHandsTask, "MoveHands", 4096, NULL, 1, NULL, 1);
-  xTaskCreatePinnedToCore(displayTimeTask, "DisplayTime", 4096, NULL, 1, NULL, 1);
+
+  // Create task
+  xTaskCreatePinnedToCore(displayTimeTask, "DisplayTime", 8192, NULL, 0, &displayTimeTaskHandle, 1);
+  xTaskCreatePinnedToCore(moveHandsTask, "MoveHands", 8192, NULL, 1, &moveHandsTaskHandle, 1); 
 
 }
 
@@ -291,7 +314,8 @@ void moveHandsTask(void *param) {
       }
     }
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(1000)); 
+
   }
 
 }
@@ -319,5 +343,18 @@ void displayTimeTask(void *param) {
 
 // Not needed
 void loop() {
-}
 
+  if (moveHandsTaskHandle != NULL) {
+    UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(moveHandsTaskHandle);
+    ESP_LOGI(TAG, "MoveHandsTask High Water Mark: %u", highWaterMark);
+  }
+  if (displayTimeTaskHandle != NULL) {
+    UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(displayTimeTaskHandle);
+    ESP_LOGI(TAG, "DisplayTimeTask High Water Mark: %u", highWaterMark);
+  }
+  size_t largest_free_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  ESP_LOGI(TAG, "Largest free block: %u bytes", largest_free_block);
+
+  vTaskDelay(pdMS_TO_TICKS(10000));
+
+}

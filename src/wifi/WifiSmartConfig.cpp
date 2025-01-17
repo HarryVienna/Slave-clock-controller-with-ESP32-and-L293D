@@ -33,18 +33,15 @@ WifiSmartConfig::WifiSmartConfig(const char* aes_key, const char* hostname,
                                  const char* ntp_server,
                                  void (*connectionCallback)(WifiConnectStatus status),
                                  void (*sntpCallback)(struct timeval *tv)) 
-  : _aes_key(strdup(aes_key)),  
-    _hostname(strdup(hostname)),
-    _ntp_server(strdup(ntp_server)), 
+  : _aes_key(aes_key),  
+    _hostname(hostname),
+    _ntp_server(ntp_server), 
     _connectionCallback(connectionCallback), 
     _sntpCallback(sntpCallback) { 
 
 }
 
 WifiSmartConfig::~WifiSmartConfig() {
-  free(_aes_key);
-  free(_hostname);
-  free(_ntp_server);
   if (_wifi_event_group != NULL) {
     vEventGroupDelete(_wifi_event_group);
   }
@@ -212,7 +209,7 @@ esp_err_t WifiSmartConfig::connect() {
     memset(&smart_cfg, 0, sizeof(smartconfig_start_config_t)); // Ensure that the struct is initialized
     smart_cfg.enable_log = false;
     smart_cfg.esp_touch_v2_enable_crypt = true;
-    smart_cfg.esp_touch_v2_key = _aes_key;
+    smart_cfg.esp_touch_v2_key = const_cast<char*>(_aes_key);
 
     _connectionCallback(WifiConnectStatus::Smartconfig);
 
