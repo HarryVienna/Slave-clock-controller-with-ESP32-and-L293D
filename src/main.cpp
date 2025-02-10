@@ -120,6 +120,17 @@ void updateDisplayStatus() {
   tftMutex.unlock(); 
 }
 
+void updateDisplayTime(const char* timeStr) {
+
+  tftMutex.lock();
+
+  // Show the time on the display
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString(timeStr, tft.width() / 2, tft.height() / 2, 4);
+
+  tftMutex.unlock(); 
+}
+
 
 /// Get the current time
 bool getTime(struct tm& timeInfo) {
@@ -140,7 +151,7 @@ void connectionCallback(WifiSmartConfig::WifiConnectStatus status) {
 }
 
 void timeSyncCallback(struct timeval *tv) {
-   ESP_LOGI(TAG, "Zeit synchronisiert: %s", ctime(&tv->tv_sec));
+  ESP_LOGI(TAG, "Zeit synchronisiert: %s", ctime(&tv->tv_sec));
 
   timeSynced = true;
   updateDisplayStatus();
@@ -171,7 +182,6 @@ void sendPulses(uint16_t count) {
 
 // Function to send one pulse
 void sendPulse() {
-
   ESP_LOGI(TAG, "Move hand");
 
   sendPulses(1);
@@ -267,7 +277,7 @@ void setup(void) {
   tft.setCursor(0, 50);
   tft.print("Move the hands to 12 o'clock position. Then press Start");
   
-   ESP_LOGI(TAG, "Start Setup");
+  ESP_LOGI(TAG, "Start Setup");
   buttons.setMoveCallback(sendPulse); // Callback for moving the handles
   buttons.start(); // Blocking loop to set the hands
   
@@ -275,7 +285,7 @@ void setup(void) {
   tft.fillRect(0, 30, tft.width(), tft.height(), TFT_BLACK);    
 
   // Create task
-  xTaskCreatePinnedToCore(displayTimeTask, "DisplayTime", 8192, NULL, 0, &displayTimeTaskHandle, 1);
+  xTaskCreatePinnedToCore(displayTimeTask, "DisplayTime", 8192, NULL, 1, &displayTimeTaskHandle, 1);
   xTaskCreatePinnedToCore(moveHandsTask, "MoveHands", 8192, NULL, 1, &moveHandsTaskHandle, 1); 
 
 }
@@ -332,9 +342,7 @@ void displayTimeTask(void *param) {
       char timeStr[9]; // Space for "HH:MM:SS"
       strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
 
-      // Show the time on the display
-      tft.setTextDatum(MC_DATUM);
-      tft.drawString(timeStr, tft.width() / 2, tft.height() / 2, 4);
+      updateDisplayTime(timeStr);
     }
 
     vTaskDelay(pdMS_TO_TICKS(1000)); // Wait a second
@@ -355,6 +363,6 @@ void loop() {
   size_t largest_free_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   ESP_LOGI(TAG, "Largest free block: %u bytes", largest_free_block);
 
-  vTaskDelay(pdMS_TO_TICKS(10000));
+  vTaskDelay(pdMS_TO_TICKS(60000));
 
 }
