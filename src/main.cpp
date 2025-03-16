@@ -236,9 +236,15 @@ void setup(void) {
     return;
   }
 
-  while (wifi.connect() != ESP_OK) {
-     ESP_LOGE(TAG, "WiFi Verbindung fehlgeschlagen. Erneuter Versuch...");
-  }
+  // Use this to directly connect to a WiFi network without SmartConfig
+  while (wifi.connect("xxxx", "yyyy") != ESP_OK) {
+    ESP_LOGE(TAG, "WiFi Verbindung fehlgeschlagen. Erneuter Versuch...");
+ }
+
+  // Use this to connect via SmartConfig
+  // while (wifi.connect() != ESP_OK) {
+  //    ESP_LOGE(TAG, "WiFi Verbindung fehlgeschlagen. Erneuter Versuch...");
+  // }
 
   // SNTP und Zeitzone initialisieren
   if (wifi.initSNTP() == ESP_OK) {

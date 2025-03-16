@@ -148,6 +148,20 @@ esp_err_t WifiSmartConfig::init() {
   return ESP_OK;
 }
 
+esp_err_t WifiSmartConfig::connect(const char* ssid, const char* password) {
+  wifi_config_t wifi_config;
+  memset(&wifi_config, 0, sizeof(wifi_config_t));
+  strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
+  strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+
+  esp_err_t ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+  if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to set wifi config");
+      return ret;
+  }
+
+  return connect();
+}
 
 esp_err_t WifiSmartConfig::connect() {
     EventBits_t bits;

@@ -26,6 +26,7 @@ public:
 
   esp_err_t init();
   esp_err_t connect();
+  esp_err_t connect(const char* ssid, const char* password);
   esp_err_t start();
   esp_err_t stop();
   esp_err_t initSNTP();
