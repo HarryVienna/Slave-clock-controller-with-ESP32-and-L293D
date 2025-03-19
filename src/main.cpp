@@ -5,6 +5,8 @@
 
 #include "wifi/WifiSmartConfig.h"
 #include "buttons/ButtonHandler.h"
+#include "buttons/Button.h"
+#include "buttons/MyClass.h"
 
 #define TAG "SLAVECLOCK"
 
@@ -42,6 +44,7 @@ TaskHandle_t moveHandsTaskHandle;
 TaskHandle_t displayTimeTaskHandle;
 std::mutex tftMutex;
 
+bool paused = false; // Pause flag
 bool timeSynced    = false; // Status of time-synchronisation
 WifiSmartConfig::WifiConnectStatus wifiConnected = WifiSmartConfig::WifiConnectStatus::Disconnected; // Status of WiFi connection
 
@@ -53,12 +56,20 @@ void moveHandsTask(void *param);
 void connectionCallback(WifiSmartConfig::WifiConnectStatus status);
 void timeSyncCallback(struct timeval *tv);
 
-
 // Init objects
 TFT_eSPI tft = TFT_eSPI();
-ButtonHandler buttons(BUTTON_MOVE_PIN, BUTTON_START_PIN);
 WifiSmartConfig wifi(aes_key, hostname, ntpserver, connectionCallback, timeSyncCallback);
 
+void button1ShortPress() {
+  Serial.println("Button 1: Kurzer Klick");
+}
+
+void button1LongPress() {
+  Serial.println("Button 1: Langer Klick (wiederholt)");
+}
+
+Button buttonStart(BUTTON_START_PIN);
+Button buttonMove(BUTTON_MOVE_PIN);
 
 
 
@@ -187,19 +198,21 @@ void sendPulse() {
   sendPulses(1);
 }
 
+
+// ---- Setup ----
+// This function is called once at the beginning of the program
+// It is used to initialize the hardware
 void setup(void) {
 
-  setCpuFrequencyMhz(80);
 
   Serial.begin(115200);
   while (!Serial){
     delay(500);
   } 
 
-  esp_reset_reason_t reason = esp_reset_reason();
-  Serial.printf("Reset Reason: %d\n", reason);
-
   printInfo();
+
+  setCpuFrequencyMhz(80);
 
   // Init pins
   pinMode(PULSE_GPIO_ENABLE, OUTPUT);
@@ -216,7 +229,6 @@ void setup(void) {
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextSize(2);
 
-
   // Set display brightness very low to save energy
   ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
   ledcAttachPin(TFT_BL, PWM_CHANNEL);
@@ -226,9 +238,6 @@ void setup(void) {
   updateDisplayStatus();
 
   // Start Wifi 
-  tft.setCursor(0, 30);
-  tft.print("Waiting for WiFi");
-
   if (wifi.init() == ESP_OK) {
      ESP_LOGI(TAG, "WiFi initialisiert");
   } else {
@@ -237,7 +246,7 @@ void setup(void) {
   }
 
   // Use this to directly connect to a WiFi network without SmartConfig
-  while (wifi.connect("xxxx", "yyyy") != ESP_OK) {
+  while (wifi.connect("__SSID__", "__passwd__", "CET-1CEST,M3.5.0,M10.5.0/3") != ESP_OK) {
     ESP_LOGE(TAG, "WiFi Verbindung fehlgeschlagen. Erneuter Versuch...");
  }
 
@@ -259,40 +268,44 @@ void setup(void) {
      ESP_LOGE(TAG, "Zeitzonen Initialisierung fehlgeschlagen");
   }
 
-
-  const char* reset_reason_str;
-  switch (reason) {
-      case ESP_RST_POWERON: reset_reason_str = "Power-on Reset"; break;
-      case ESP_RST_EXT: reset_reason_str = "External Reset"; break;
-      case ESP_RST_SW: reset_reason_str = "Software Reset"; break;
-      case ESP_RST_PANIC: reset_reason_str = "Panic Reset (Exception)"; break;
-      case ESP_RST_INT_WDT: reset_reason_str = "Interrupt WDT Reset"; break;
-      case ESP_RST_TASK_WDT: reset_reason_str = "Task WDT Reset"; break;
-      case ESP_RST_WDT: reset_reason_str = "Other WDT Reset"; break;
-      case ESP_RST_DEEPSLEEP: reset_reason_str = "Deep Sleep Reset"; break;
-      case ESP_RST_BROWNOUT: reset_reason_str = "Brownout Reset"; break;
-      case ESP_RST_SDIO: reset_reason_str = "SDIO Reset"; break;
-      default: reset_reason_str = "Unknown Reset"; break;
-  }
-
-  tft.fillRect(0, 30, tft.width(), tft.height(), TFT_BLACK); 
-  tft.setCursor(0, 30);
-  tft.print(reset_reason_str);
-
   // Info text
   tft.setCursor(0, 50);
   tft.print("Move the hands to 12 o'clock position. Then press Start");
   
   ESP_LOGI(TAG, "Start Setup");
-  buttons.setMoveCallback(sendPulse); // Callback for moving the handles
-  buttons.start(); // Blocking loop to set the hands
   
+  buttonMove.setShortPressCallback(sendPulse);
+  buttonMove.setLongPressCallback(sendPulse);
+  
+  buttonStart.waitForAnyClick(); // Wait for any click to start the clock
 
+  ESP_LOGI(TAG, "Start clock");
+      
+  // Clear the display
   tft.fillRect(0, 30, tft.width(), tft.height(), TFT_BLACK);    
 
   // Create task
   xTaskCreatePinnedToCore(displayTimeTask, "DisplayTime", 8192, NULL, 1, &displayTimeTaskHandle, 1);
   xTaskCreatePinnedToCore(moveHandsTask, "MoveHands", 8192, NULL, 1, &moveHandsTaskHandle, 1); 
+
+  // Remove the callback functions for moving the hands
+  buttonMove.setShortPressCallback(nullptr);
+  buttonMove.setLongPressCallback(nullptr);
+
+  // Set the callback functions for the start button to pause and resume the clock
+  buttonStart.setShortPressCallback([]() {
+      
+    paused =  !paused;
+
+    if (paused) {
+      ESP_LOGI(TAG, "Pause clock");
+      vTaskSuspend(moveHandsTaskHandle);
+    } else {
+      ESP_LOGI(TAG, "Resume clock");
+      vTaskResume(moveHandsTaskHandle);
+    }
+
+  });
 
 }
 
@@ -358,17 +371,5 @@ void displayTimeTask(void *param) {
 // Not needed
 void loop() {
 
-  if (moveHandsTaskHandle != NULL) {
-    UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(moveHandsTaskHandle);
-    ESP_LOGI(TAG, "MoveHandsTask High Water Mark: %u", highWaterMark);
-  }
-  if (displayTimeTaskHandle != NULL) {
-    UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(displayTimeTaskHandle);
-    ESP_LOGI(TAG, "DisplayTimeTask High Water Mark: %u", highWaterMark);
-  }
-  size_t largest_free_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-  ESP_LOGI(TAG, "Largest free block: %u bytes", largest_free_block);
-
-  vTaskDelay(pdMS_TO_TICKS(60000));
 
 }

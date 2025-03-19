@@ -148,7 +148,7 @@ esp_err_t WifiSmartConfig::init() {
   return ESP_OK;
 }
 
-esp_err_t WifiSmartConfig::connect(const char* ssid, const char* password) {
+esp_err_t WifiSmartConfig::connect(const char* ssid, const char* password, const char* timezone) {
   wifi_config_t wifi_config;
   memset(&wifi_config, 0, sizeof(wifi_config_t));
   strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
@@ -158,6 +158,20 @@ esp_err_t WifiSmartConfig::connect(const char* ssid, const char* password) {
   if (ret != ESP_OK) {
       ESP_LOGE(TAG, "Failed to set wifi config");
       return ret;
+  }
+
+  // Store timezone in NVS
+  nvs_handle_t my_handle;
+  ret = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &my_handle);
+  if (ret == ESP_OK) {
+      ret = nvs_set_str(my_handle, TIMEZONE_VALUE, timezone);
+      if (ret != ESP_OK) {
+          ESP_LOGE(TAG, "Failed to store timezone in NVS");
+      }
+      nvs_commit(my_handle);
+      nvs_close(my_handle);
+  } else {
+      ESP_LOGE(TAG, "Failed to open NVS");
   }
 
   return connect();
