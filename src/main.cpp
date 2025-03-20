@@ -248,7 +248,7 @@ void setup(void) {
   // Use this to directly connect to a WiFi network without SmartConfig
   while (wifi.connect("__SSID__", "__passwd__", "CET-1CEST,M3.5.0,M10.5.0/3") != ESP_OK) {
     ESP_LOGE(TAG, "WiFi Verbindung fehlgeschlagen. Erneuter Versuch...");
- }
+  }
 
   // Use this to connect via SmartConfig
   // while (wifi.connect() != ESP_OK) {
@@ -370,6 +370,5 @@ void displayTimeTask(void *param) {
 
 // Not needed
 void loop() {
-
-
+  
 }
