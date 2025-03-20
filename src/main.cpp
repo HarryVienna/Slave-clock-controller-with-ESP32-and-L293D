@@ -4,9 +4,7 @@
 #include <mutex>
 
 #include "wifi/WifiSmartConfig.h"
-#include "buttons/ButtonHandler.h"
 #include "buttons/Button.h"
-#include "buttons/MyClass.h"
 
 #define TAG "SLAVECLOCK"
 
