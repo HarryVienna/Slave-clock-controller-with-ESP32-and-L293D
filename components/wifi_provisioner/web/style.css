@@ -197,6 +197,7 @@ select:disabled {
 
     text-align: center;
     -moz-appearance: textfield; /* Versteckt Pfeile in Firefox */
+    appearance: none; /* Der Standardweg, um Browser-Styling zu entfernen */
 }
 
 /* Versteckt Pfeile in Chrome, Safari, Edge */

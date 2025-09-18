@@ -92,13 +92,29 @@ void SlaveClock::update() {
         return; 
     }
 
+    // Puffer, um Datum und Zeit aufzunehmen (z.B. "DD.MM.YYYY HH:MM:SS\0")
+    char real_time_str[30];
+    char clock_time_str[30];
+    struct tm timeinfo;
+
+    // 1. Reale Systemzeit mit Datum formatieren
+    localtime_r(&now, &timeinfo);
+    strftime(real_time_str, sizeof(real_time_str), "%d.%m.%Y %H:%M:%S", &timeinfo);
+
+    // 2. Intern gespeicherte Zeit der Uhr mit Datum formatieren
+    localtime_r(&_clock_time, &timeinfo);
+    strftime(clock_time_str, sizeof(clock_time_str), "%d.%m.%Y %H:%M:%S", &timeinfo);
+
+    // 3. Beide Zeiten ausgeben
+    ESP_LOGI(TAG, "Reale Zeit = %s, Angezeigte Zeit = %s", real_time_str, clock_time_str);
+
     time_t current_minute_floored = (now / 60) * 60;
 
     if (_clock_time < current_minute_floored) {
-        int minutes_to_flip = (current_minute_floored - _clock_time) / 60;
-        ESP_LOGI(TAG, "Uhr geht %d Minute(n) nach. Sende Impuls(e)...", minutes_to_flip);
+        int minutes_to_move = (current_minute_floored - _clock_time) / 60;
+        ESP_LOGI(TAG, "Uhr geht %d Minute(n) nach. Sende Impuls(e)...", minutes_to_move);
         
-        _send_pulses_internal(minutes_to_flip);
+        _send_pulses_internal(minutes_to_move);
         
         _clock_time = current_minute_floored;
         ESP_LOGI(TAG, "Zeit ist wieder synchron.");
