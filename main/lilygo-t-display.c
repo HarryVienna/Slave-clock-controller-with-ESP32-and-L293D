@@ -220,7 +220,7 @@ void display_init()
     ledc_timer_config(&ledc_timer);
     ledc_channel_config(&ledc_channel);
 
-    set_backlight_brightness(8);
+    set_backlight_brightness(32);
 
 
 

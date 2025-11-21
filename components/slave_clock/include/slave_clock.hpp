@@ -40,7 +40,9 @@ private:
     int _pulse_interval_ms;
 
     // ZUSTAND
-    time_t _clock_time;     // Der Zeitstempel, den die Uhr physisch anzeigt
+    int _clock_hour;    // Was die Uhr anzeigt
+    int _clock_minute;  // Was die Uhr anzeigt
+    int _clock_day;     // Tag (um Mitternacht zu erkennen)
     int _polarity_level;    // Die aktuelle Polarität für den Schrittmotor (0 oder 1)
 };
 
