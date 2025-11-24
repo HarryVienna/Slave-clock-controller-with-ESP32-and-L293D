@@ -12,14 +12,14 @@ public:
     SlaveClock(gpio_num_t enable_pin, gpio_num_t input1_pin, gpio_num_t input2_pin,
               int pulse_width_ms, int pulse_interval_ms);
 
-    // Setzt die Startzeit der Uhr (z.B. 10:30)
+    // Setzt die Startzeit der Uhr
     void setTime(uint8_t hour, uint8_t minute);
 
     // Die Hauptfunktion, die in der Schleife aufgerufen wird.
     // Prüft, ob die Uhr nachgeht und aktualisiert sie bei Bedarf.
     void update();
 
-    // Sendet eine bestimmte Anzahl von Impulsen (nützlich für Tests/Initialisierung)
+    // Sendet eine bestimmte Anzahl von Impulsen
     void sendPulses(int count);
 
 
@@ -29,20 +29,22 @@ private:
     // Helferfunktion zur Initialisierung der GPIOs
     void _init_gpio();
 
+    // Helper für Uhrzeit
+    static bool _is_leap(int y);
+    static time_t _timegm(struct tm *tm);
+
     // Interne Logik zum Senden der Impulse
     void _send_pulses_internal(int count);
 
-    // PINS & TIMINGS
+    // Pins und Timings
     gpio_num_t _enable_pin;
     gpio_num_t _input1_pin;
     gpio_num_t _input2_pin;
     int _pulse_width_ms;
     int _pulse_interval_ms;
 
-    // ZUSTAND
-    int _clock_hour;    // Was die Uhr anzeigt
-    int _clock_minute;  // Was die Uhr anzeigt
-    int _clock_day;     // Tag (um Mitternacht zu erkennen)
+    // Zustand
+    struct tm _clock_tm; 
     int _polarity_level;    // Die aktuelle Polarität für den Schrittmotor (0 oder 1)
 };
 
