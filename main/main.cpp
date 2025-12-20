@@ -43,11 +43,11 @@ extern "C" void app_main(void) {
         provisioner.get_credentials();
     } else {
         show_message("Start Provisioning", false);
-        provisioner.start_provisioning("Siemens Slave Clock Setup", false);
+        provisioner.start_provisioning("Slave Clock Setup", false);
     }
 
     show_message("Connecting to WiFi", false);
-    provisioner.connect_sta("Siemens Slave Clock");
+    provisioner.connect_sta("Slave Clock");
 
     show_message("Synching time", false);
     while(!provisioner.is_time_synchronized()) {
